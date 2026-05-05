@@ -1,6 +1,8 @@
+import random
 from dataclasses import dataclass
 
 import psutil
+import zstandard as zstd
 from screeninfo import get_monitors
 
 
@@ -37,12 +39,22 @@ def get_available_monitors() -> dict[str, tuple[int, int]]:
     return monitors
 
 
+def _generate_dummy_screenshot(size: int) -> bytes:
+    # simulate screenshot-like data: mostly uniform regions with slight variation
+    base_color = random.randint(0, 255)
+    return bytes((base_color + random.randint(-5, 5)) % 256 for _ in range(size))
+
+
 def calculate_disk_usage(
     sampling_rate: int, retain_time: int, monitors_info: list[tuple[int, int]], available_space: int
 ) -> tuple[bool, int]:
-    # return True if we can retain that much data, False otherwise
     # assume each frame is 4 bytes per pixel (RGBA)
-    bytes_per_frame = 4 * sum(width * height for width, height in monitors_info)
+    # for now simulate creation of a screenshot, then compress and recalc
+    dummy_screenshot = _generate_dummy_screenshot(
+        4 * sum(width * height for width, height in monitors_info)
+    )
+    compressed_data = zstd.compress(dummy_screenshot)
+    bytes_per_frame = len(compressed_data)
     frames_per_second = 1 / sampling_rate
     bytes_per_second = bytes_per_frame * frames_per_second
     bytes_per_day = bytes_per_second * 60 * 60 * 24
