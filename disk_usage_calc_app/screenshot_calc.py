@@ -4,90 +4,88 @@ Script to calculate the disk usage using screenshots save as PNG directly, accor
 
 import os
 import time
+from dataclasses import dataclass
 
+import streamlit as st
 from mss import MSS
 from PIL import Image
-from zstandard import compress
 
 NUM_OF_SAMPLES = 100
 SAMPLE_RATE = 0.015  # seconds between screenshots
+FOLDER_TO_SAVE = "shots"
 
 
-def grab_vs_save_size() -> None:
-    avg_time_save = 0
-    avg_time_grab = 0
-    folder_to_save = "shots"
-    os.makedirs(folder_to_save, exist_ok=True)
+@dataclass
+class ConfigOptions:
+    num_of_samples: int = NUM_OF_SAMPLES
+    sampling_rate: int | float = SAMPLE_RATE
+    resize_width: int = 224
+    resize_height: int = 224
+    cleanup: bool = True
+
+
+def calc_stats(config: ConfigOptions) -> tuple[int | float, int | float, int | float]:
+    avg_size = 0
+    total_time = 0
+    actual_size = 0
+
+    os.makedirs(FOLDER_TO_SAVE, exist_ok=True)
 
     with MSS() as sct:
         for i in range(NUM_OF_SAMPLES):
-            print("Saving screenshot as PNG... and timing it")
-            start_time_save = time.time()
-            sct.shot(output=f"{folder_to_save}/screenshot_{i}.png")
-            file_size = os.path.getsize(f"{folder_to_save}/screenshot_{i}.png")
-            print(f"Saved screenshot as PNG size: {file_size} bytes")
-
-            with open(f"{folder_to_save}/screenshot_{i}.png", "rb") as f:
-                img = Image.open(f)
-                img_resized = img.resize((img.width // 2, img.height // 2))
-                resize_path = f"{folder_to_save}/screenshot_{i}_resized.png"
-                img_resized.save(resize_path)
-                resized_size = os.path.getsize(resize_path)
-                print(f"Resized PNG size: {resized_size} bytes")
-
-            end_time_save = time.time()
-            elapsed_time_save = end_time_save - start_time_save
-            avg_time_save += elapsed_time_save
-
-            # os.remove(f"{folder_to_save}/screenshot_{i}.png")
-            start_time_grab = time.time()
+            start_time = time.time()
             ss = sct.grab(sct.monitors[0])
-            print(f"Grabbed screenshot size: {len(ss.raw)} bytes")
 
             # Resize the grabbed screenshot
-            img_grabbed = Image.frombytes("RGB", ss.size, ss.rgb)
-            img_grabbed_resized = img_grabbed.resize(
-                (img_grabbed.width // 2, img_grabbed.height // 2)
-            )
-            grabbed_resized_size = len(img_grabbed_resized.tobytes())
-            print(f"Resized grabbed screenshot size: {grabbed_resized_size} bytes")
+            img = Image.frombytes("RGB", ss.size, ss.rgb)
+            img_resized = img.resize(size=(config.resize_width, config.resize_height))
+            img_resized.save(f"{FOLDER_TO_SAVE}/screenshot_{i}.png")
 
-            img_grabbed_resized.save(f"{folder_to_save}/grabbed_screenshot_{i}_resized.png")
+            total_time += time.time() - start_time
+            file_size = os.path.getsize(f"{FOLDER_TO_SAVE}/screenshot_{i}.png")
+            actual_size += file_size
+            avg_size += file_size
 
-            end_time_grab = time.time()
-            elapsed_time_grab = end_time_grab - start_time_grab
-            avg_time_grab += elapsed_time_grab
+    avg_size = actual_size / NUM_OF_SAMPLES
+    return avg_size, total_time, actual_size
 
-    print(f"Average time to save PNG: {avg_time_save / NUM_OF_SAMPLES:.4f} seconds")
-    print(f"Average time to grab and process: {avg_time_grab / NUM_OF_SAMPLES:.4f} seconds")
+
+def show_config() -> ConfigOptions:
+    st.subheader("Configuration Options")
+    config = ConfigOptions()
+    config.num_of_samples = st.number_input(
+        "Number of Samples", min_value=1, value=config.num_of_samples, key="num_samples"
+    )
+    config.sampling_rate = st.number_input(
+        "Sample Rate (seconds)", min_value=0.0, value=config.sampling_rate, key="sample_rate"
+    )
+    config.resize_width = st.number_input(
+        "Resize Width", min_value=224, value=config.resize_width, key="resize_width"
+    )
+    config.resize_height = st.number_input(
+        "Resize Height", min_value=224, value=config.resize_height, key="resize_height"
+    )
+    config.cleanup = st.checkbox("Cleanup Screenshots After Calculation", value=True, key="cleanup")
+    return config
 
 
 def main() -> None:
-    # take the screenshots, save them as PNG, will not bother with multiple mons
-    folder_to_save = "shots"
-    os.makedirs(folder_to_save, exist_ok=True)
-    with MSS() as sct:
-        for i in range(NUM_OF_SAMPLES):
-            sct.shot(output=f"{folder_to_save}/screenshot_{i}.png")
-            time.sleep(SAMPLE_RATE)
+    st.title("Disk Usage Calculation for Screenshots")
+    config = show_config()
 
-    # calc size
-    sum = 0
-    for i in range(NUM_OF_SAMPLES):
-        file_size = os.path.getsize(f"{folder_to_save}/screenshot_{i}.png")
-        print(f"Screenshot {i} size: {file_size} bytes")
-        sum += file_size
-    print(f"Total size: {sum} bytes")
+    start_button = st.button("Start Calculation")
+    if start_button:
+        with st.spinner("Calculating disk usage..."):
+            avg_size, total_time, actual_size = calc_stats(config)
+
+        st.write(f"Average Size Calc per screenshot: {avg_size} bytes")
+        st.write(f"Total Time Calc: {total_time} seconds")
+        st.write(f"Actual Size Calc: {actual_size} bytes")
+
+    if config.cleanup:
+        for file in os.listdir(FOLDER_TO_SAVE):
+            os.remove(os.path.join(FOLDER_TO_SAVE, file))
 
 
 if __name__ == "__main__":
-    # main()
-    # sum = 0
-    # for i in range(NUM_OF_SAMPLES):
-    #     with open(f"shots/screenshot_{i}.png", "rb") as f:
-    #         data = f.read()
-    #         compressed_data = compress(data)
-    #         print(f"Compressed screenshot {i} size: {len(compressed_data)} bytes")
-    #         sum += len(compressed_data)
-    # print(f"Total compressed size: {sum} bytes")
-    grab_vs_save_size()
+    main()
