@@ -10,6 +10,8 @@ class CalculationOptions:
     sampling_rate: int = 5
     retain_time: int = 60
     monitors_info: list[tuple[int, int]] = field(default_factory=list)
+    resize_width: int = 224
+    resize_height: int = 224
 
 
 def format_drive_info(drive_info: DriveInfo) -> None:
@@ -22,9 +24,30 @@ def format_drive_info(drive_info: DriveInfo) -> None:
 
 def show_calculation_options() -> CalculationOptions:
     st.subheader("Disk Usage Calculation Options")
+
     sampling_rate = st.number_input("Sampling rate (seconds)", min_value=1, value=5, step=1)
     retain_time = st.number_input("Retention time (days)", min_value=1, value=60, step=1)
     available_monitors = get_available_monitors()
+
+    min_resize_width = 224
+    min_resize_height = 224
+    max_resize_width = max(monitor[0] for monitor in available_monitors.values())
+    max_resize_height = max(monitor[1] for monitor in available_monitors.values())
+    resize_width = st.slider(
+        "Resize width (pixels)",
+        min_value=min_resize_width,
+        max_value=max_resize_width,
+        value=224,
+        step=1,
+    )
+    resize_height = st.slider(
+        "Resize height (pixels)",
+        min_value=min_resize_height,
+        max_value=max_resize_height,
+        value=224,
+        step=1,
+    )
+
     monitors_selected = st.multiselect(
         "Select monitors to include in the calculation",
         options=available_monitors.keys(),
@@ -32,7 +55,11 @@ def show_calculation_options() -> CalculationOptions:
     )
     monitors_info = [available_monitors[monitor] for monitor in monitors_selected]
     return CalculationOptions(
-        sampling_rate=sampling_rate, retain_time=retain_time, monitors_info=monitors_info
+        sampling_rate=sampling_rate,
+        retain_time=retain_time,
+        monitors_info=monitors_info,
+        resize_width=resize_width,
+        resize_height=resize_height,
     )
 
 
@@ -62,6 +89,8 @@ def show_main_ui() -> None:
                 sampling_rate=calculation_options.sampling_rate,
                 retain_time=calculation_options.retain_time,
                 monitors_info=calculation_options.monitors_info,
+                resize_width=calculation_options.resize_width,
+                resize_height=calculation_options.resize_height,
                 available_space=drive_info.free,
             )
             if can_retain:

@@ -46,12 +46,17 @@ def _generate_dummy_screenshot(size: int) -> bytes:
 
 
 def calculate_disk_usage(
-    sampling_rate: int, retain_time: int, monitors_info: list[tuple[int, int]], available_space: int
+    sampling_rate: int,
+    retain_time: int,
+    monitors_info: list[tuple[int, int]],
+    available_space: int,
+    resize_width: int,
+    resize_height: int,
 ) -> tuple[bool, int]:
     # assume each frame is 4 bytes per pixel (RGBA)
     # for now simulate creation of a screenshot, then compress and recalc
     dummy_screenshot = _generate_dummy_screenshot(
-        4 * sum(width * height for width, height in monitors_info)
+        4 * sum(resize_width * resize_height for _ in monitors_info)
     )
     compressed_data = zstd.compress(dummy_screenshot)
     bytes_per_frame = len(compressed_data)
